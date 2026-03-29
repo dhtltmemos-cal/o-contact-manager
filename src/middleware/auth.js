@@ -77,7 +77,9 @@ async function authMiddleware(req, res, next) {
     getRtdb()
       .ref(`api_keys/${keyHash}/lastUsedAt`)
       .set(new Date().toISOString())
-      .catch(() => {}); // ignore errors để không block request
+      .catch(err => {
+        console.warn('[auth] lastUsedAt update failed:', err.message);
+      });
 
     req.apiKey = { hash: keyHash, ...keyInfo };
     return next();

@@ -15,8 +15,8 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { parseVcfFile } = require('./vcf2json');
-const { bulkWriteContacts } = require('../functions/utils/writeContact');
-const { getFirestore, FieldValue } = require('../functions/utils/firebase-admin');
+const { bulkWriteContacts } = require('../src/utils/writeContact');
+const { getFirestore, FieldValue } = require('../src/utils/firebase-admin');
 
 // ─── Parse CLI args ──────────────────────────────────────────────────────────
 const args = process.argv.slice(2);

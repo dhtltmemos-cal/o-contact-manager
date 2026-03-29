@@ -41,6 +41,24 @@ router.post('/import', async (req, res) => {
     });
   }
 
+  const MAX_CONTACT_BYTES = 100 * 1024; // 100KB/contact
+  for (let i = 0; i < contacts.length; i++) {
+    const contact = contacts[i];
+    if (!contact || typeof contact !== 'object' || Array.isArray(contact)) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `contacts[${i}] must be an object`,
+      });
+    }
+    const approxBytes = Buffer.byteLength(JSON.stringify(contact), 'utf8');
+    if (approxBytes > MAX_CONTACT_BYTES) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: `contacts[${i}] exceeds ${MAX_CONTACT_BYTES} bytes`,
+      });
+    }
+  }
+
   const jobId = `job_${nanoid(12)}`;
   const rtdb = getRtdb();
 
@@ -116,7 +134,7 @@ router.get('/import/:jobId', async (req, res) => {
     }
     return res.json({ data: snap.val() });
   } catch (err) {
-    return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to read job status' });
   }
 });
 
@@ -125,12 +143,12 @@ router.get('/import/:jobId', async (req, res) => {
 /**
  * Query params:
  *   format  — json (default) | vcf
- *   limit   — max contacts, default 10000
+ *   limit   — max contacts, default 1000
  *   category — filter theo category (optional)
  */
 router.get('/export', async (req, res) => {
   const format = req.query.format === 'vcf' ? 'vcf' : 'json';
-  const limit = Math.min(parseInt(req.query.limit, 10) || 10000, 30000);
+  const limit = Math.min(parseInt(req.query.limit, 10) || 1000, 5000);
   const category = req.query.category?.trim() || null;
 
   try {
@@ -167,10 +185,13 @@ router.get('/export', async (req, res) => {
     // Export tất cả (không filter)
     const snapshot = await q.limit(limit).get();
     const details = snapshot.docs.map(d => d.data());
+    if (limit >= 5000) {
+      res.setHeader('X-Export-Warning', 'Large exports may consume significant memory');
+    }
     return sendExport(res, details, format, details.length);
   } catch (err) {
     console.error('[GET /bulk/export]', err);
-    return res.status(500).json({ error: 'Internal Server Error', message: err.message });
+    return res.status(500).json({ error: 'Internal Server Error', message: 'Failed to export contacts' });
   }
 });
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const { parseQueryParams, validateQueryParams } = require('../functions/utils/pagination');
+const { parseQueryParams, validateQueryParams } = require('../src/utils/pagination');
 
 describe('validateQueryParams()', () => {
   test('cho phép query không filter với sort linh hoạt', () => {

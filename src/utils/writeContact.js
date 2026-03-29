@@ -2,6 +2,34 @@
 
 const { getFirestore, FieldValue } = require('./firebase-admin');
 const { buildContactDocs, encodeDocId } = require('./contactMapper');
+const MAX_BATCH_OPS = 490;
+
+async function commitInChunks(db, operations, maxOps = MAX_BATCH_OPS) {
+  let batch = db.batch();
+  let opsInBatch = 0;
+
+  const flush = async () => {
+    if (opsInBatch === 0) return;
+    await batch.commit();
+    batch = db.batch();
+    opsInBatch = 0;
+  };
+
+  for (const op of operations) {
+    if (opsInBatch >= maxOps) await flush();
+
+    if (op.type === 'set') {
+      batch.set(op.ref, op.data, op.options);
+    } else if (op.type === 'delete') {
+      batch.delete(op.ref);
+    } else {
+      throw new Error(`Unsupported Firestore op type: ${op.type}`);
+    }
+    opsInBatch++;
+  }
+
+  await flush();
+}
 
 async function getExistingContactMeta(db, contactId) {
   const snap = await db.collection('contacts_index').doc(contactId).get();
@@ -32,19 +60,18 @@ async function writeContact(contactJson, options = {}) {
   const oldEmailDocIds = new Set((existingMeta?.allEmails || []).map(email => encodeDocId(email)));
   const oldUdKeys = new Set(existingMeta?.userDefinedKeys || []);
 
-  const batch = db.batch();
-
-  batch.set(db.collection('contacts_index').doc(contactId), indexDoc);
-  batch.set(db.collection('contacts_detail').doc(contactId), detailDoc);
+  const operations = [];
+  operations.push({ type: 'set', ref: db.collection('contacts_index').doc(contactId), data: indexDoc });
+  operations.push({ type: 'set', ref: db.collection('contacts_detail').doc(contactId), data: detailDoc });
 
   const newEmailDocIds = new Set(emailLookupDocs.map(e => e.docId));
   for (const oldDocId of oldEmailDocIds) {
     if (!newEmailDocIds.has(oldDocId)) {
-      batch.delete(db.collection('email_lookup').doc(oldDocId));
+      operations.push({ type: 'delete', ref: db.collection('email_lookup').doc(oldDocId) });
     }
   }
   for (const { docId, data } of emailLookupDocs) {
-    batch.set(db.collection('email_lookup').doc(docId), data);
+    operations.push({ type: 'set', ref: db.collection('email_lookup').doc(docId), data });
   }
 
   const newUdKeys = new Set(udKeyUpdates.map(u => u.key));
@@ -53,26 +80,36 @@ async function writeContact(contactJson, options = {}) {
   for (const oldKey of oldUdKeys) {
     if (!newUdKeys.has(oldKey)) {
       const oldDocId = encodeDocId(oldKey);
-      batch.set(db.collection('ud_key_lookup').doc(oldDocId), {
-        key: oldKey,
-        contactIds: FieldValue.arrayRemove(contactId),
-        count: FieldValue.increment(-1),
-        updatedAt: nowISO,
-      }, { merge: true });
+      operations.push({
+        type: 'set',
+        ref: db.collection('ud_key_lookup').doc(oldDocId),
+        data: {
+          key: oldKey,
+          contactIds: FieldValue.arrayRemove(contactId),
+          count: FieldValue.increment(-1),
+          updatedAt: nowISO,
+        },
+        options: { merge: true },
+      });
     }
   }
 
   for (const { docId, key } of udKeyUpdates) {
     const isExistingKey = oldUdKeys.has(key);
-    batch.set(db.collection('ud_key_lookup').doc(docId), {
-      key,
-      contactIds: FieldValue.arrayUnion(contactId),
-      ...(isExistingKey ? {} : { count: FieldValue.increment(1) }),
-      updatedAt: nowISO,
-    }, { merge: true });
+    operations.push({
+      type: 'set',
+      ref: db.collection('ud_key_lookup').doc(docId),
+      data: {
+        key,
+        contactIds: FieldValue.arrayUnion(contactId),
+        ...(isExistingKey ? {} : { count: FieldValue.increment(1) }),
+        updatedAt: nowISO,
+      },
+      options: { merge: true },
+    });
   }
 
-  await batch.commit();
+  await commitInChunks(db, operations);
   return { contactId, emailCount: emailLookupDocs.length, udKeyCount: udKeyUpdates.length };
 }
 
@@ -82,22 +119,26 @@ async function deleteContact(contactId) {
   if (!indexSnap.exists) throw new Error(`Contact not found: ${contactId}`);
 
   const { allEmails = [], userDefinedKeys = [] } = indexSnap.data();
-  const batch = db.batch();
-
-  batch.delete(db.collection('contacts_index').doc(contactId));
-  batch.delete(db.collection('contacts_detail').doc(contactId));
+  const operations = [];
+  operations.push({ type: 'delete', ref: db.collection('contacts_index').doc(contactId) });
+  operations.push({ type: 'delete', ref: db.collection('contacts_detail').doc(contactId) });
   for (const email of allEmails) {
-    batch.delete(db.collection('email_lookup').doc(encodeDocId(email)));
+    operations.push({ type: 'delete', ref: db.collection('email_lookup').doc(encodeDocId(email)) });
   }
   for (const key of userDefinedKeys) {
-    batch.set(db.collection('ud_key_lookup').doc(encodeDocId(key)), {
-      contactIds: FieldValue.arrayRemove(contactId),
-      count: FieldValue.increment(-1),
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    operations.push({
+      type: 'set',
+      ref: db.collection('ud_key_lookup').doc(encodeDocId(key)),
+      data: {
+        contactIds: FieldValue.arrayRemove(contactId),
+        count: FieldValue.increment(-1),
+        updatedAt: new Date().toISOString(),
+      },
+      options: { merge: true },
+    });
   }
 
-  await batch.commit();
+  await commitInChunks(db, operations);
   return { contactId, deletedEmails: allEmails.length, cleanedUdKeys: userDefinedKeys.length };
 }
 

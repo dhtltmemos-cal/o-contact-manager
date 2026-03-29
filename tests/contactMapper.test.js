@@ -1,7 +1,7 @@
 'use strict';
 
-const { buildSearchTokens, normalize, tokensFromText } = require('../functions/utils/searchTokens');
-const { buildContactDocs, encodeDocId, extractEmails } = require('../functions/utils/contactMapper');
+const { buildSearchTokens, normalize, tokensFromText } = require('../src/utils/searchTokens');
+const { buildContactDocs, encodeDocId, extractEmails } = require('../src/utils/contactMapper');
 
 describe('normalize()', () => {
   test('lowercase + trim', () => { expect(normalize('  John DOE  ')).toBe('john doe'); });

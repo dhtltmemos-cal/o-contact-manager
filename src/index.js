@@ -12,11 +12,39 @@ const bulkRouter = require('./routes/bulk');
 const metaRouter = require('./routes/meta');
 
 const app = express();
+const requestBuckets = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX = 60;
+
+function rateLimitMiddleware(req, res, next) {
+  if (req.path === '/health') return next();
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+  const now = Date.now();
+  const bucket = requestBuckets.get(ip);
+
+  if (!bucket || now > bucket.resetAt) {
+    requestBuckets.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+
+  if (bucket.count >= RATE_LIMIT_MAX) {
+    const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
+    res.setHeader('Retry-After', String(Math.max(retryAfter, 1)));
+    return res.status(429).json({
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded (${RATE_LIMIT_MAX} requests/minute)`,
+    });
+  }
+
+  bucket.count += 1;
+  return next();
+}
 
 // ─── Core middleware ──────────────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // bulk import cần limit cao hơn
 app.use(express.urlencoded({ extended: false }));
+app.use(rateLimitMiddleware);
 
 // ─── Health check (không cần auth) ───────────────────────────────────────────
 app.get('/health', (req, res) => {
@@ -67,9 +95,17 @@ app.use((err, req, res, next) => {
 const PORT = parseInt(process.env.PORT, 10) || 3000;
 
 if (require.main === module) {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`✅ Contact Manager API running on http://localhost:${PORT}`);
     console.log(`   Health: http://localhost:${PORT}/health`);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('⚠️  SIGTERM received, closing HTTP server...');
+    server.close(() => {
+      console.log('✅ HTTP server closed.');
+      process.exit(0);
+    });
   });
 }
 

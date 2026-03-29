@@ -24,8 +24,8 @@
 
 require('dotenv').config();
 
-const { getFirestore, FieldValue } = require('../functions/utils/firebase-admin');
-const { buildContactDocs } = require('../functions/utils/contactMapper');
+const { getFirestore, FieldValue } = require('../src/utils/firebase-admin');
+const { buildContactDocs } = require('../src/utils/contactMapper');
 
 // ─── Parse CLI args ──────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -139,7 +139,6 @@ async function main() {
             {
               key,
               contactIds: FieldValue.arrayUnion(doc.id),
-              count: FieldValue.increment(1),
               updatedAt: new Date().toISOString(),
             },
             { merge: true }
