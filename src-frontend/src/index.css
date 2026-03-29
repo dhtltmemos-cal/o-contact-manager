@@ -1,0 +1,86 @@
+/* Path: src-frontend/src/index.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-primary: #1a73e8;
+    --color-primary-dark: #1557b0;
+    --color-surface: #ffffff;
+    --color-surface-variant: #f8f9fa;
+    --color-on-surface: #202124;
+    --color-on-surface-variant: #5f6368;
+    --color-divider: #e0e0e0;
+    --color-error: #ea4335;
+    --color-success: #34a853;
+    --color-warning: #fbbc04;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply font-sans text-on-surface bg-surface-variant;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior: none;
+  }
+
+  /* Scrollbar custom */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-divider rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-on-surface-variant/30;
+  }
+
+  /* Safe area insets cho PWA/mobile */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg font-medium bg-primary text-white px-4 py-2 text-body-md transition-colors hover:bg-primary-600 active:bg-primary-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-300 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg font-medium bg-white text-on-surface border border-divider px-4 py-2 text-body-md transition-colors hover:bg-surface-container focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-200 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-card;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-divider bg-white px-3 py-2 text-body-md text-on-surface placeholder:text-on-surface-variant/60 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary disabled:opacity-50 disabled:bg-surface-container;
+  }
+}
+
+/* PWA standalone mode extra top space */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+  }
+}
